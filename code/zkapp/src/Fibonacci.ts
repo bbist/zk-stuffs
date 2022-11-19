@@ -48,15 +48,15 @@ export const FibonacciSequence = Experimental.ZkProgram({
         fib0: {
             privateInputs: [],
             method(n: Fibonacci) {
-                n.prev.assertEquals(Field.zero)
-                n.value.assertEquals(Field.zero)
+                n.prev.assertEquals(Field(0))
+                n.value.assertEquals(Field(0))
             },
         },
         fib1: {
             privateInputs: [],
             method(n: Fibonacci) {
-                n.prev.assertEquals(Field.zero)
-                n.value.assertEquals(Field.one)
+                n.prev.assertEquals(Field(0))
+                n.value.assertEquals(Field(1))
             },
         },
         fibn: {
