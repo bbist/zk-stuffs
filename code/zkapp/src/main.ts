@@ -10,15 +10,22 @@ import {
     AccountUpdate,
     verify,
     Proof,
+    Bool,
 } from 'snarkyjs'
-import { genesisHeader, Header, HeaderChain } from './BlockHeader.js';
+import { HeaderChain, Sig, Header } from './BlockHeader.js';
+import { AddOne } from './AddOne.js';
 
 
 const main = async () => {
     await isReady
 
-    // await fibonacci(5)
-    await blockHeaders(5)
+    try {
+        // addone(5)
+        // await fibonacci(5)
+        await blockHeaders(5)
+    } catch (error) {
+        console.error(error)
+    }
 }
 
 const timeit = async (
@@ -26,19 +33,36 @@ const timeit = async (
     callback: (...args: any[]) => any,
     ...args: any[]
 ) => {
-    console.log(`${label}...`)
+    const prefix = `${label}...`
+    process.stdout.write(prefix)
     console.time(label)
     const out = await callback(...args)
+    process.stdout.moveCursor(-prefix.length, 0)
     console.timeLog(label)
     return out
+}
+
+const addone = async (N = 2) => {
+    const { verificationKey } = await timeit("compile", AddOne.compile)
+
+    const base: Proof<Field> = await timeit("base", AddOne.base, Field(0))
+
+    let prf = base
+    for (let n = 1; n <= N; n++) {
+        console.log(`status(${n - 1}):`, await timeit(`verify(${n - 1})`, verify, prf, verificationKey))
+        console.log(prf.toJSON().proof.length)
+        prf = await timeit(`step${n}`, AddOne.step, Field(n), prf, prf)
+    }
+
+    console.log(`status(${N}):`, await timeit(`verify(${N})`, verify, prf, verificationKey))
 }
 
 // proving N'th fibonacci number
 const fibonacci = async (N = 2) => {
     const { verificationKey } = await timeit("compile", FibonacciSequence.compile)
 
-    const fib0: Proof<Fibonacci> = await timeit("fib0", FibonacciSequence.fib0, new Fibonacci(Field.zero, Field.zero))
-    const fib1: Proof<Fibonacci> = await timeit("fib1", FibonacciSequence.fib1, new Fibonacci(Field.one, Field.zero))
+    const fib0: Proof<Fibonacci> = await timeit("fib0", FibonacciSequence.fib0, new Fibonacci(Field(0), Field(0)))
+    const fib1: Proof<Fibonacci> = await timeit("fib1", FibonacciSequence.fib1, new Fibonacci(Field(1), Field(0)))
 
     let fib_n: Proof<Fibonacci>,
         fib_n_1: Proof<Fibonacci>
@@ -47,6 +71,9 @@ const fibonacci = async (N = 2) => {
     fib_n = fib1
     fib_n_1 = fib0
     for (let n = 2; n <= N; n++) {
+        console.log(`status(${n - 1}):`, await timeit(`verify(${n - 1})`, verify, fib_n, verificationKey))
+        console.log(fib_n.toJSON().proof.length)
+
         let publicInput = new Fibonacci(
             fib_n.publicInput.value.add(fib_n_1.publicInput.value),
             fib_n.publicInput.value,
@@ -56,43 +83,68 @@ const fibonacci = async (N = 2) => {
         fib_n = fib
     }
 
-    // // false sequence starting from fib1, fib1, 
-    // // fails to generate or verify proof
-    // let fib2PublicInput = new Fibonacci(fib1.publicInput.value.add(fib1.publicInput.value), fib1.publicInput.value)
-    // let fib2: SelfProof<Fibonacci> = await timeit(`fib2`, FibonacciSequence.fibn, fib2PublicInput, fib1, fib1)
-    // let fib22PublicInput = new Fibonacci(fib2.publicInput.value.add(fib2.publicInput.value), fib2.publicInput.value)
-    // let fib22: SelfProof<Fibonacci> = await timeit(`fib22`, FibonacciSequence.fibn, fib22PublicInput, fib2, fib2)
-    // fib_n = fib22
-
-    const status = await timeit("verify", verify, fib_n, verificationKey)
-    console.log("status: ", status)
+    console.log(`status(${N}):`, await timeit(`verify(${N})`, verify, fib_n, verificationKey))
 }
 
+
 const blockHeaders = async (N = 2) => {
+
     const { verificationKey } = await timeit("compile", HeaderChain.compile)
 
-    const gh = genesisHeader()
+    const h0 = Header.h0()
 
-    const ghproof: Proof<Header> = await timeit("genesis", HeaderChain.genesis, gh)
-    const fhproof: Proof<Header> = await timeit("first", HeaderChain.first, new Header(Field.one, gh.hash(), Field(Field.one.toString())))
+    const h0prf: Proof<Header> = await timeit("h0", HeaderChain.h0, h0)
 
-    let hproof: Proof<Header>,
-        hproof_n_1: Proof<Header>
+    let hprf = h0prf
+    for (let n = 1; n <= N; n++) {
+        console.log(`status(${n - 1}):`, await timeit(`verify(${n - 1})`, verify, hprf, verificationKey))
+        console.log(hprf.toJSON())
 
-    // true sequence starting from fib0 + fib1
-    hproof = fhproof
-    hproof_n_1 = ghproof
-    for (let n = 2; n <= N; n++) {
-        const num = hproof.publicInput.num.add(Field.one)
-        const prev = hproof.publicInput.hash()
-        const data = Field(num.toString())
-        let hp = await timeit(`h${n}`, HeaderChain.next, new Header(num, prev, data), hproof, hproof_n_1)
-        hproof_n_1 = hproof
-        hproof = hp
+        const hpub = hprf.publicInput
+        const num = hpub.num.add(1)
+        let vals: Field[] = [...hpub.vals]
+        let extra = Field(0)
+
+        // change validators and update extra at epoch change
+        if (num.toBigInt() % BigInt(Header.epochSize) == BigInt(0)) {
+            vals = Header.randomValidators(Header.maxvals)
+            extra = Field.ofBits(vals.reduce((p, v) => {
+                return [...p, ...v.toBits().slice(0, Sig.valbits)]
+            }, new Array<Bool>()))
+        }
+
+        const h = new Header(num, hpub.hash(), Field(num.toString()), extra, vals, [])
+
+        // if (num.toBigInt() % BigInt(Header.epochSize) == BigInt(0)) {
+        //     h.extra = Field(0)
+        // } // no extra data at epoch change
+
+        // if (num.toBigInt() % BigInt(Header.epochSize) == BigInt(0)) {
+        //     const bits = h.extra.toBits()
+        //     bits[0] = bits[0].not()
+        //     h.extra = Field.ofBits(bits)
+        // } // incorrect extra data at epoch change
+
+        h.sigs = hpub.vals.map(val => Sig.create(h.hash(), val).toField())
+
+        // h.sigs.forEach((_, i) => {
+        //     if (i <= Header.maxvals / 2) {
+        //         h.sigs[i] = Field(0)
+        //     }
+        // }) // insufficient signatures (< 1/2 of required vals)
+
+        // h.sigs.forEach((_, i) => {
+        //     if (i <= Header.maxvals / 2) {
+        //         const sig = Sig.fromField(h.sigs[i])
+        //         sig._h12[0] = sig._h12[0].not() // flip first bit
+        //         h.sigs[i] = sig.toField()
+        //     }
+        // }) // invalid signatures (< 1/2 of required vals)
+
+        hprf = await timeit(`h(${n})`, HeaderChain.next, h, hprf, hprf)
     }
 
-    const status = await timeit("verify", verify, hproof, verificationKey)
-    console.log("status: ", status)
+    console.log(`status(${N}):`, await timeit("verify", verify, hprf, verificationKey))
 }
 
 const simpleContract = async () => {
