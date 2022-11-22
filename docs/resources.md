@@ -1,6 +1,6 @@
 ## Books and Papers
 
-[Proofs, Arguments and Zero Knowledge: Justin Thaler](https://people.cs.georgetown.edu/jthaler/ProofsArgsAndZK.html)
+[Proofs, Arguments and Zero Knowledge: Justin Thaler](https://people.cs.georgetown.edu/jthaler/ProofsArgsAndZK.html) [[Video Playlist](https://www.youtube.com/watch?v=esBIB_ZaFVg&list=PLj80z0cJm8QEmZkGgSOLpr_8B08SCWVQ7)]
 
 
 ## Blogs, Posts and Videos
