@@ -1,0 +1,11 @@
+{
+    "program": "battleship.aleo",
+    "version": "0.0.0",
+    "description": "",
+    "development": {
+        "private_key": "APrivateKey1zkp4qGpceFEv54QRy55YXGDgtzaMZZbbbPjo43hceCFZKP5",
+        "view_key": "AViewKey1i2tyUvHXNbHqnBzpjvTDfy4j7SZGD6twfQPuob1QeCWk",
+        "address": "aleo1vdky0pce93k0kkduk6r0f46myzvw3feeedqr7ypmukx4237dnqqsavp6xr"
+    },
+    "license": "MIT"
+}
